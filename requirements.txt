@@ -1,8 +1,6 @@
 streamlit
 pandas
 numpy
-transformers
-torch
 plotly
+requests
 scikit-learn
-google-generativeai

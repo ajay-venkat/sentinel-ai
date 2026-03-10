@@ -1,15 +1,4 @@
 import re
-import random
-try:
-    import google.generativeai as genai
-    import os
-    if os.getenv("GEMINI_API_KEY"):
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        HAS_GENAI = True
-    else:
-        HAS_GENAI = False
-except ImportError:
-    HAS_GENAI = False
 
 EMOJI_MAP = {
     "🚀": "bullish excited",
@@ -20,111 +9,125 @@ EMOJI_MAP = {
     "💨": "fast speed",
     "😍": "love excellent",
     "🔥": "amazing perfect",
-    "🗑️": "trash garbage"
+    "🗑️": "trash garbage",
+    "💀": "dead terrible",
+    "😂": "funny laughing",
+    "👎": "bad dislike",
+    "👍": "good like",
 }
 
-NEGATIVE_WORDS = ["garbage", "fail", "broken", "worst", "trash", "slow", "terrible", "bad", "awful", "cheap", "sucks"]
+NEGATIVE_WORDS = [
+    "garbage", "fail", "broken", "worst", "trash", "slow",
+    "terrible", "bad", "awful", "cheap", "sucks", "horrible",
+    "useless", "scam", "ripoff", "disappointing"
+]
+
 ASPECT_CATEGORIES = ["Product Quality", "Price", "Customer Support", "Speed"]
 
 def preprocess_text(text: str) -> str:
+    if not text or not text.strip():
+        return ""
+    # Remove RTs
+    text = re.sub(r'^RT\s+', '', text)
     # Remove URLs
     text = re.sub(r'http\S+|www.\S+', '', text, flags=re.MULTILINE)
-    # Map emojis
+    # Map emojis to text
     for emoji, meaning in EMOJI_MAP.items():
         if emoji in text:
             text = text.replace(emoji, f" {meaning} ")
     # Clean excessive whitespace
     text = " ".join(text.split())
-    return text
+    return text.strip()
 
-def analyze_sentiment(text: str, sentiment_model) -> tuple:
+def analyze_sentiment(text: str, sentiment_fn) -> tuple:
+    """Returns (label, score). sentiment_fn is a callable that takes text and returns {'label':..., 'score':...}"""
     if not text.strip():
-        return ("Neutral", 0.0)
-    
+        return ("Informational", 0.5)
+
     try:
-        result = sentiment_model(text)[0]
-        label = result['label']
-        score = result['score']
-        
-        # Sarcasm Layer
-        if label.lower() == 'positive' or label.lower() == 'neutral':
-            lower_text = text.lower()
-            negative_word_count = sum(1 for word in NEGATIVE_WORDS if word in lower_text)
-            if negative_word_count >= 1 and ("🙄" in text or "sure" in lower_text or "great" in lower_text):
-                # Heuristic for sarcasm if positive but has negative context words or eyeroll
+        result = sentiment_fn(text)
+        label = result.get('label', 'neutral')
+        score = result.get('score', 0.5)
+
+        # Normalize label names from the HF model
+        label_lower = label.lower()
+        if 'positive' in label_lower:
+            label = 'Positive'
+        elif 'negative' in label_lower:
+            label = 'Negative'
+        else:
+            label = 'Informational'
+
+        # --- Sarcasm Layer ---
+        lower_text = text.lower()
+        negative_word_count = sum(1 for word in NEGATIVE_WORDS if word in lower_text)
+
+        if label == 'Positive':
+            sarcasm_cues = any(cue in lower_text for cue in ["sure", "great", "love how", "perfect", "brilliant", "fantastic", "oh wow", "yeah right"])
+            has_eyeroll = "🙄" in text or "sarcastic" in lower_text or "annoyed" in lower_text
+            if negative_word_count >= 1 and (sarcasm_cues or has_eyeroll):
                 label = "Sarcastic/Critical"
             elif negative_word_count >= 2:
                 label = "Sarcastic/Critical"
-        
-        if label.lower() == 'neutral':
-            label = "Informational"
 
-        # Capitolize correctly
-        if label.lower() == 'positive': label = 'Positive'
-        if label.lower() == 'negative': label = 'Negative'
-            
         return (label, score)
     except Exception as e:
         print(f"Sentiment error: {e}")
-        return ("Neutral", 0.0)
+        return ("Informational", 0.5)
 
-def detect_aspect(text: str, aspect_model, sentiment_label: str) -> str:
+def detect_aspect(text: str, zero_shot_fn, sentiment_label: str) -> str:
+    """Returns the detected aspect category."""
     if not text.strip():
-        return "Unknown"
-    
-    # If the user is just saying hi or something irrelevant
-    if len(text.split()) < 3 and sentiment_label in ["Positive", "Informational"]:
-         return "General"
+        return "General"
+    if len(text.split()) < 3:
+        return "General"
 
     try:
-        result = aspect_model(text, ASPECT_CATEGORIES)
-        # return the top category
+        result = zero_shot_fn(text, ASPECT_CATEGORIES)
         return result['labels'][0]
     except Exception as e:
         print(f"Aspect error: {e}")
-        return "Unknown"
+        return "General"
 
 def calculate_crisis_score(sentiment_intensity: float, reach_factor: float, velocity: float) -> float:
-    # R = (Sentiment_Intensity * Reach_Factor) * Velocity
-    # Bound it between 0 and 100
     score = (sentiment_intensity * reach_factor) * velocity
     return min(100.0, max(0.0, score))
 
 def generate_responses(negative_posts: list) -> tuple:
     """Returns (summary, [professional, empathic, witty])"""
     if not negative_posts:
-        return ("No negative mentions to summarize.", ["", "", ""])
-    
-    context = " ".join(negative_posts[:10])
-    
-    if HAS_GENAI:
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            prompt = f"Summarize the last few negative mentions into a 1-sentence root cause based on: {context}"
-            summary_resp = model.generate_content(prompt)
-            summary = summary_resp.text.strip()
-            
-            resp_prompt = f"Based on this issue: '{summary}', write 3 short responses. \n1) Professional\n2) Empathic\n3) Brand-Witty\nFormat: just the 3 responses separated by ||"
-            reply_resp = model.generate_content(resp_prompt)
-            replies = reply_resp.text.split("||")
-            if len(replies) != 3:
-                replies = ["We apologize for the inconvenience and are working on it.", "We hear your frustration and want to make it right.", "Whoops! Our bad. We're on it! 🚀"]
-            return (summary, [r.strip() for r in replies])
-        except Exception as e:
-            print(f"GenAI error: {e}")
-            pass
+        return ("No negative mentions detected yet.", [
+            "We're monitoring the conversation.",
+            "We appreciate your engagement!",
+            "All clear on the radar! 🛡️"
+        ])
 
-    # Fallback if no LLM
+    # Smart keyword-based heuristic
+    context = " ".join(negative_posts[:20]).lower()
     keywords = set()
     for w in NEGATIVE_WORDS:
-        if w in context.lower():
+        if w in context:
             keywords.add(w)
-    
-    kb_str = ", ".join(list(keywords)[:3]) if keywords else "general issues"
-    summary = f"Users are frequently complaining about matters related to: {kb_str}."
-    
-    prof = "Thank you for bringing this to our attention. Our team is investigating."
-    emp = "We are so sorry to hear you're experiencing this. Please DM us so we can resolve this immediately."
-    wit = "Oof, that wasn't supposed to happen! We're sending our best engineers to fix it right now 🏃‍♂️💨"
-    
+
+    # Detect themes
+    themes = []
+    if any(w in context for w in ["support", "help", "service", "hung up", "hold", "wait"]):
+        themes.append("customer support")
+    if any(w in context for w in ["price", "expensive", "cost", "cheap", "money", "pay"]):
+        themes.append("pricing")
+    if any(w in context for w in ["quality", "broken", "defect", "build", "material"]):
+        themes.append("product quality")
+    if any(w in context for w in ["slow", "speed", "fast", "lag", "loading", "optimization"]):
+        themes.append("performance/speed")
+    if any(w in context for w in ["crash", "bug", "update", "fix", "broken"]):
+        themes.append("software stability")
+
+    theme_str = ", ".join(themes) if themes else ", ".join(list(keywords)[:3]) if keywords else "general dissatisfaction"
+
+    summary = f"Users are primarily expressing frustration about: {theme_str}."
+
+    prof = "Thank you for your feedback. Our team is actively investigating these concerns and will provide an update shortly."
+    emp = "We sincerely apologize for the experience you're having. Your concerns matter deeply to us — please DM us so we can make this right."
+    wit = "Yikes, that wasn't supposed to happen! 😅 Our best engineers are already on it — expect improvements soon! 🚀"
+
     return (summary, [prof, emp, wit])
