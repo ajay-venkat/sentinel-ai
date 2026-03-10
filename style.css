@@ -1,0 +1,89 @@
+/* Sentinel AI Dark Mode Injection */
+body {
+    background-color: #0e1117;
+    color: #e0e0e0;
+    font-family: 'Inter', sans-serif;
+}
+.stApp {
+    background-color: #0e1117;
+}
+/* Headers */
+h1 {
+    color: #3b82f6;
+    font-weight: 800;
+}
+h2, h3 {
+    color: #60a5fa;
+}
+
+/* Custom cards for metrics */
+div[data-testid="stMetricValue"] {
+    color: #ffffff;
+    font-size: 2rem;
+    font-weight: bold;
+}
+div[data-testid="metric-container"] {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    padding: 5% 10%;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Live Feed Items */
+.feed-item {
+    background-color: #1e293b;
+    padding: 15px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border-left: 6px solid #64748b;
+    color: #f8fafc;
+    font-size: 1.05rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    animation: fadeIn 0.5s ease-in-out;
+}
+.feed-Positive { border-left-color: #22c55e; }
+.feed-Negative { border-left-color: #ef4444; }
+.feed-Informational { border-left-color: #94a3b8; }
+.feed-SarcasticCritical { border-left-color: #f59e0b; }
+
+.feed-meta {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.sentiment-badge {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    font-size: 0.8rem;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Scrollable container for feed */
+.feed-container {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+/* Custom Scrollbar for dark mode */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0f172a; 
+}
+::-webkit-scrollbar-thumb {
+    background: #334155; 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #475569; 
+}

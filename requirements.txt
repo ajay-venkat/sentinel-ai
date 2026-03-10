@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+transformers
+torch
+plotly
+scikit-learn
+google-generativeai
